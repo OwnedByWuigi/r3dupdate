@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 update_r3dfox_fullinstall.py
-Updates a full r3dfox installation (C:\Program Files\Eclipse Community\r3dfox)
-to the latest GitHub release by downloading and silently executing the installer .exe.
-Uses only the Python standard library. Checks if current version is older than latest.
+Windows 7+ compatible updater for r3dfox full install.
+Downloads and runs the latest .exe installer silently.
 """
 
 import json
@@ -22,137 +22,142 @@ from urllib.error import HTTPError, URLError
 # ----------------------------------------------------------------------
 INSTALL_ROOT = r"C:\Program Files\Eclipse Community"
 INSTALL_DIR  = os.path.join(INSTALL_ROOT, "r3dfox")
-FIREFOX_EXE  = os.path.join(INSTALL_DIR, "firefox.exe")
+FIREFOX_EXE  = os.path.join(INSTALL_DIR, "r3dfox.exe")
+APP_INI      = os.path.join(INSTALL_DIR, "application.ini")
 
 LATEST_API   = "https://api.github.com/repos/Eclipse-Community/r3dfox/releases/latest"
 
-# Installer asset patterns (.exe for full install)
+# Installer patterns (adjust if filename changes)
 ASSET_PATTERNS = {
-    "win32": "r3dfox-win32-installer.exe",
-    "win64": "r3dfox-win64-installer.exe",
-    # Fallback if exact name not found; adjust based on actual naming
-    # From GitHub, check if it's something like "r3dfox-setup-win64.exe" etc.
+    "win32": ["r3dfox-win32-installer.exe", "r3dfox-setup-win32.exe"],
+    "win64": ["r3dfox-win64-installer.exe", "r3dfox-setup-win64.exe"],
 }
 
 # ----------------------------------------------------------------------
-# 1. Sanity checks – Windows only
+# 1. Windows 7+ Check
 # ----------------------------------------------------------------------
 if platform.system() != "Windows":
     print("This script only runs on Windows.")
     sys.exit(1)
 
-# Detect architecture
-is_64bit = sys.maxsize > 2**32 or os.environ.get("PROCESSOR_ARCHITEW6432", "")
-arch = "win64" if is_64bit else "win32"
-print(f"Detected architecture: {arch}")
+winver = platform.win32_ver()[1]
+if winver < "6.1":
+    print("Windows 7 or later required.")
+    sys.exit(1)
 
-# Check if current installation exists
+# ----------------------------------------------------------------------
+# 2. Detect architecture (Win7-safe)
+# ----------------------------------------------------------------------
+import struct
+is_64bit = struct.calcsize("P") == 8
+arch = "win64" if is_64bit else "win32"
+print(f"Architecture: {arch}")
+
+# ----------------------------------------------------------------------
+# 3. Check installation
+# ----------------------------------------------------------------------
 if not os.path.exists(INSTALL_DIR):
-    print(f"No r3dfox installation found in '{INSTALL_DIR}'. Please install first.")
+    print(f"r3dfox not found in:\n  {INSTALL_DIR}")
+    print("Please install r3dfox first.")
     sys.exit(1)
 
 if not os.path.exists(FIREFOX_EXE):
-    print(f"firefox.exe not found in '{INSTALL_DIR}'. Installation may be incomplete.")
+    print("r3dfox.exe missing. Corrupted install?")
     sys.exit(1)
 
 # ----------------------------------------------------------------------
-# 2. Get current version from application.ini
+# 4. Get current version from application.ini (Win7-safe)
 # ----------------------------------------------------------------------
 def get_current_version():
-    app_ini_path = os.path.join(INSTALL_DIR, "application.ini")
-    if not os.path.exists(app_ini_path):
-        print("application.ini not found. Cannot determine current version.")
+    if not os.path.exists(APP_INI):
         return None
     try:
-        with open(app_ini_path, 'r', encoding='utf-8') as f:
+        with open(APP_INI, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
-        match = re.search(r'Version=(\d+(?:\.\d+)+)', content)
-        if match:
-            return match.group(1)
-        else:
-            print("Could not parse version from application.ini.")
-            return None
-    except Exception as e:
-        print(f"Error reading application.ini: {e}")
+        m = re.search(r'^\s*Version\s*=\s*([\d\.]+)', content, re.MULTILINE)
+        return m.group(1) if m else None
+    except:
         return None
 
 current_version = get_current_version()
-if current_version:
-    print(f"Current version: {current_version}")
-else:
-    print("Warning: Could not detect current version. Proceeding anyway.")
+print(f"Current version: {current_version or 'Unknown'}")
 
 # ----------------------------------------------------------------------
-# 3. Fetch latest release info from GitHub API
+# 5. Fetch latest release
 # ----------------------------------------------------------------------
-print("Fetching latest r3dfox release info...")
+print("Checking for updates...")
 try:
-    with urllib.request.urlopen(LATEST_API) as response:
-        data = json.loads(response.read().decode())
-    latest_tag = data['tag_name']
+    req = urllib.request.Request(LATEST_API, headers={'User-Agent': 'r3dfox-updater'})
+    with urllib.request.urlopen(req) as resp:
+        data = json.loads(resp.read().decode('utf-8'))
+    latest_tag = data['tag_name'].lstrip('v')
     print(f"Latest version: {latest_tag}")
-except (URLError, HTTPError, json.JSONDecodeError, KeyError) as e:
-    print(f"Error fetching release info: {e}")
+except Exception as e:
+    print(f"Failed to fetch release: {e}")
     sys.exit(1)
 
-# Compare versions (simple string compare works for semantic versioning like 144.0.2 > 140.5.0)
-if current_version and latest_tag <= current_version:
-    print(f"Current version {current_version} is up to date or newer than {latest_tag}. No update needed.")
+# Compare versions
+if current_version and current_version >= latest_tag:
+    print("You are up to date!")
     sys.exit(0)
 
-# Find the installer asset
+# ----------------------------------------------------------------------
+# 6. Find installer asset
+# ----------------------------------------------------------------------
 installer_url = None
 installer_name = None
-for asset in data['assets']:
-    name = asset['name'].lower()
-    pattern = ASSET_PATTERNS[arch].lower()
-    if pattern in name and name.endswith('.exe'):
+patterns = ASSET_PATTERNS[arch]
+
+for asset in data.get('assets', []):
+    name = asset['name']
+    if any(p.lower() in name.lower() for p in patterns) and name.endswith('.exe'):
         installer_url = asset['browser_download_url']
-        installer_name = asset['name']
+        installer_name = name
         break
 
 if not installer_url:
-    print(f"No matching installer .exe found for {arch}.")
-    print("Available assets:")
-    for asset in data['assets']:
-        print(f"  - {asset['name']}")
+    print(f"Installer not found for {arch}.")
+    print("Available files:")
+    for a in data.get('assets', []):
+        print(f"  - {a['name']}")
     sys.exit(1)
 
-print(f"Found installer: {installer_name}")
+print(f"Found: {installer_name}")
 
 # ----------------------------------------------------------------------
-# 4. Download the installer to temp
+# 7. Download installer
 # ----------------------------------------------------------------------
-temp_dir = tempfile.gettempdir()
+temp_dir = tempfile.mkdtemp(prefix='r3dfox_')
 installer_path = os.path.join(temp_dir, installer_name)
-print(f"Downloading installer to {installer_path}...")
+
+print(f"Downloading to:\n  {installer_path}")
 try:
-    with urllib.request.urlopen(installer_url) as response:
-        with open(installer_path, 'wb') as f:
-            shutil.copyfileobj(response, f)
-    print("Download completed.")
-except URLError as e:
+    req = urllib.request.Request(installer_url, headers={'User-Agent': 'r3dfox-updater'})
+    with urllib.request.urlopen(req) as src, open(installer_path, 'wb') as dst:
+        shutil.copyfileobj(src, dst)
+except Exception as e:
     print(f"Download failed: {e}")
     sys.exit(1)
 
 # ----------------------------------------------------------------------
-# 5. Silently execute the installer
+# 8. Run installer silently
 # ----------------------------------------------------------------------
-print("Executing installer silently...")
+print("Installing silently...")
 try:
-    # Assume /S for silent install (common for NSIS installers; adjust if different)
-    # You may need to check the actual installer flags from release notes
-    cmd = [installer_path, '/S']  # Silent install
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode == 0:
-        print(f"Installation completed successfully. Updated to {latest_tag}.")
+    # NSIS installers use /S
+    cmd = [installer_path, '/S']
+    proc = subprocess.run(cmd, cwd=temp_dir, capture_output=True, text=True)
+    if proc.returncode == 0:
+        print(f"Updated to {latest_tag}!")
     else:
-        print(f"Installer returned code {result.returncode}. Output: {result.stdout} {result.stderr}")
-        sys.exit(1)
+        print(f"Installer failed (code {proc.returncode})")
+        print(proc.stdout)
+        print(proc.stderr)
 except Exception as e:
-    print(f"Error executing installer: {e}")
-    sys.exit(1)
+    print(f"Install error: {e}")
 finally:
     # Cleanup
-    if os.path.exists(installer_path):
-        os.remove(installer_path)
+    try:
+        shutil.rmtree(temp_dir)
+    except:
+        pass
