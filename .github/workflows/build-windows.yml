@@ -1,0 +1,26 @@
+name: Build Windows EXE
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build EXE
+        run: pyinstaller --onefile --noconsole --icon r3dfox.ico r3dupdate.py
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: r3dfox-updater
+          path: dist/r3dupdate.exe
