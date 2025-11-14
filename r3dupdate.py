@@ -34,6 +34,9 @@ if platform.system() != "Windows":
     print("Error: This script only runs on Windows.")
     sys.exit(1)
 
+# Win7+ check
+winver = platform.win32_ver()[1]
+
 # 64-bit detection (works on Win7)
 import struct
 is_64bit = struct.calcsize("P") == 8
