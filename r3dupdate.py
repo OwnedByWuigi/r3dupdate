@@ -27,14 +27,10 @@ APP_INI      = os.path.join(INSTALL_DIR, "application.ini")
 
 LATEST_API   = "https://api.github.com/repos/Eclipse-Community/r3dfox/releases/latest"
 
-# ----------------------------------------------------------------------
-# 1. Windows 7+ & Architecture Detection (Win7-safe)
-# ----------------------------------------------------------------------
 if platform.system() != "Windows":
     print("Error: This script only runs on Windows.")
     sys.exit(1)
 
-# Win7+ check
 winver = platform.win32_ver()[1]
 
 # 64-bit detection (works on Win7)
@@ -43,9 +39,6 @@ is_64bit = struct.calcsize("P") == 8
 arch = "win64" if is_64bit else "win32"
 print(f"Detected: Windows {winver.split('.')[0]}, {arch}")
 
-# ----------------------------------------------------------------------
-# 2. Check r3dfox installation
-# ----------------------------------------------------------------------
 if not os.path.exists(INSTALL_DIR):
     print(f"r3dfox not installed in:\n  {INSTALL_DIR}")
     print("Please install r3dfox first.")
@@ -55,9 +48,6 @@ if not os.path.exists(FIREFOX_EXE):
     print("firefox.exe missing. Corrupted install?")
     sys.exit(1)
 
-# ----------------------------------------------------------------------
-# 3. Get current version from application.ini
-# ----------------------------------------------------------------------
 def get_current_version():
     if not os.path.exists(APP_INI):
         return None
@@ -73,9 +63,6 @@ def get_current_version():
 current_version = get_current_version()
 print(f"Current version: {current_version or 'Unknown'}")
 
-# ----------------------------------------------------------------------
-# 4. Fetch latest release from GitHub
-# ----------------------------------------------------------------------
 print("Fetching latest release...")
 try:
     req = urllib.request.Request(
@@ -95,9 +82,6 @@ if current_version and current_version >= latest_tag:
     print("You are already up to date!")
     sys.exit(0)
 
-# ----------------------------------------------------------------------
-# 5. Find installer: r3dfox-VERSION.en-US.winBITS.installer.exe
-# ----------------------------------------------------------------------
 installer_url = None
 installer_name = None
 pattern = f"r3dfox-{latest_tag}.en-US.{arch}.installer.exe"
@@ -119,9 +103,6 @@ if not installer_url:
 
 print(f"Found installer: {installer_name}")
 
-# ----------------------------------------------------------------------
-# 6. Download installer to temp folder
-# ----------------------------------------------------------------------
 temp_dir = tempfile.mkdtemp(prefix='r3dfox_update_')
 installer_path = os.path.join(temp_dir, installer_name)
 
@@ -138,13 +119,10 @@ except Exception as e:
     print(f"Download failed: {e}")
     sys.exit(1)
 
-# ----------------------------------------------------------------------
-# 7. Run installer silently (/S for NSIS)
-# ----------------------------------------------------------------------
 print("Installing silently (this may take a moment)...")
 try:
     cmd = [installer_path, '/S']  # Silent mode
-    proc = subprocess.run(cmd, cwd=temp_dir, capture_output=True, text=True, timeout=300)
+    proc = subprocess.run(cmd)
     if proc.returncode == 0:
         print(f"Successfully updated to {latest_tag}!")
     else:
