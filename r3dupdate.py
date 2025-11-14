@@ -131,8 +131,6 @@ try:
             print("STDOUT:", proc.stdout)
         if proc.stderr:
             print("STDERR:", proc.stderr)
-except subprocess.TimeoutExpired:
-    print("Installer timed out.")
 except Exception as e:
     print(f"Failed to run installer: {e}")
 finally:
