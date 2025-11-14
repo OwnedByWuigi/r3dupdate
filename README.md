@@ -7,7 +7,7 @@ Run CreateTask.ps1. This is the file that will create the scheduled task. The sc
 </li>
 <br>
 <li>
-If your account has administrator permissions, the update will be fully automatic. If not, the update will be downloaded and you will be asked by WinUpdater to start the update (administrator permissions required). 
+If your account has administrator permissions, the update will be fully automatic. If not, the update will be downloaded and you will have to terminate the r3dfox process to continue installing it.
 </li>
 <br>
 <li>
